@@ -1,0 +1,8 @@
+opencv-4.10.0
+build
+CMakeFiles
+CMake*
+cmake*
+Makefile
+test
+train

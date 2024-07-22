@@ -1,0 +1,10 @@
+bart_simpson
+charles_montgomery_burns
+homer_simpson
+krusty_the_clown
+lisa_simpson
+marge_simpson
+milhouse_van_houten
+moe_szyslak
+ned_flanders
+principal_skinner
