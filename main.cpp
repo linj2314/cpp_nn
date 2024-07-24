@@ -3,9 +3,12 @@
 using namespace std;
 using namespace cv;
 
+//batch size; make sure 8000 is divisible by this number
+const int BATCH_SIZE = 64;
+
 //an 8000 x {1, 784} data structure to hold our input data
 vector<int> Y_train;
-vector<vector<int>> X_train;
+vector<vector<double>> X_train;
 
 //weights and biases vectors
 vector<vector<double>> W_1(784, vector<double>(256, 0));
@@ -37,12 +40,12 @@ void init() {
         ifstream in = ifstream("temp.txt");
         string file_name;
         while (in >> file_name) {
-            vector<int> v(784, 0);
+            vector<double> v(784, 0);
             Mat image = imread("train/" + simpson_characters[i] + "/" + file_name, cv::IMREAD_GRAYSCALE);
             
             for (int j = 0; j < image.rows; j++) {
                 for (int k = 0; k < image.cols; k++) {
-                    v[j * 28 + k] = static_cast<int>(image.at<uchar>(j, k));
+                    v[j * 28 + k] = static_cast<int>(image.at<uchar>(j, k)) / 255.0;
                 }
             }
 
@@ -60,7 +63,7 @@ void init() {
     shuffle(indexes.begin(), indexes.end(), rng);
 
     vector<int> Y_train_temp = Y_train;
-    vector<vector<int> *> X_train_temp(8000);
+    vector<vector<double> *> X_train_temp(8000);
 
     for (int i = 0; i < 8000; i++) {
         Y_train_temp[indexes[i]] = Y_train[i];
@@ -72,8 +75,11 @@ void init() {
         X_train[i] = *X_train_temp[i];
     }
 
-    //initializing weights and biases to random values between -0.5 and 0.5
-    uniform_real_distribution<> dist(-0.5, 0.5);
+    //initializing weights
+    //"He Weight Initialization" named after Kaiming He
+    //randomly generates values according to a normal distribution with mean 0 and sd of sqrt(2/n)
+    double sd = sqrt(2.0/784);
+    normal_distribution<double> dist(0, sd);
 
     auto rand_gen = [&dist, &rng](){
         return dist(rng);
@@ -85,14 +91,86 @@ void init() {
         generate(i.begin(), i.end(), rand_gen);
     for (auto & i : W_3)
         generate(i.begin(), i.end(), rand_gen);
-    generate(B_1.begin(), B_1.end(), rand_gen);
-    generate(B_2.begin(), B_2.end(), rand_gen);
-    generate(B_3.begin(), B_3.end(), rand_gen);
 };
 
 //forwards propagation function; takes a batch as input and returns the errors
-vector<double> forward_propagate(vector<vector<int>> & batch, vector<int> labels) {
-    return {};
+vector<double> forward_propagate(vector<vector<double>> & batch, vector<int> labels) {
+    vector<vector<double>> layer1(BATCH_SIZE, vector<double>(256, 0));
+    vector<vector<double>> layer2(BATCH_SIZE, vector<double>(128, 0));
+    vector<vector<double>> layer3(BATCH_SIZE, vector<double>(10, 0));
+
+    //layer 1
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        for (int j = 0; j < 256; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 728; k++) {
+                dot_product += batch[i][k] * W_1[k][j];
+            }
+            dot_product += B_1[j];
+
+            //apply ReLU to the final dot product for activation
+            dot_product = max(dot_product, 0.0);
+            layer1[i][j] = dot_product;
+        }
+    }
+    
+    //layer 2
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        for (int j = 0; j < 128; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 256; k++) {
+                dot_product += layer1[i][k] * W_2[k][j];
+            }
+            dot_product += B_2[j];
+
+            //apply ReLU to the final dot product for activation
+            dot_product = max(dot_product, 0.0);
+            layer2[i][j] = dot_product;
+        }
+    }
+
+    //layer 3
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        //sum tracking for softmax activation at end;
+        double max_val = -DBL_MAX;
+        for (int j = 0; j < 10; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 128; k++) {
+                dot_product += layer2[i][k] * W_3[k][j];
+            }
+            dot_product += B_3[j];
+
+            max_val = max(max_val, dot_product);
+            layer3[i][j] = dot_product;
+        }
+        //apply softmax in order to get final predictions
+        double sum = 0;
+        for (int j = 0; j < 10; j++) {
+            layer3[i][j] = exp(layer3[i][j] - max_val);
+            sum += layer3[i][j];
+        }
+        for (int j = 0; j < 10; j++) {
+            layer3[i][j] /= sum;
+        }
+    }
+    
+    //calculating error
+    vector<double> errors(BATCH_SIZE);
+    vector<vector<double>> one_hot_encodings(BATCH_SIZE, vector<double>(10, 0));
+
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        one_hot_encodings[i][labels[i]] = 1;
+        double err_sum = 0;
+        for (int j = 0; j < 10; j++) {
+            err_sum += (layer3[i][j] - one_hot_encodings[i][j]) * (layer3[i][j] - one_hot_encodings[i][j]);
+        }
+        errors[i] = err_sum;
+    }
+
+    for (auto i : errors) 
+        cout << i << " ";
+
+    return errors;
 }
 
 //backwards propagation function; nudges weights and biases to minimize error using gradient descent
@@ -101,9 +179,11 @@ void back_propagate() {
 }
 
 void train() {
-    for (int i = 0; i < 80; i++) {
-        vector<vector<int>> batch(X_train.begin() + i * 100, X_train.begin() + i * 100 + 100);
-        vector<int> labels(Y_train.begin() + i * 100, Y_train.begin() + i * 100 + 100);
+    int batches = 8000 / BATCH_SIZE;
+    //TODO replace the 1 with batches later
+    for (int i = 0; i < 1; i++) {
+        vector<vector<double>> batch(X_train.begin() + i * BATCH_SIZE, X_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
+        vector<int> labels(Y_train.begin() + i * BATCH_SIZE, Y_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
         vector<double> errors = forward_propagate(batch, labels);
     }
 }
