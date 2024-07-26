@@ -3,8 +3,13 @@
 using namespace std;
 using namespace cv;
 
+//HYPER PARAMETERS---------------------------------------
 //batch size; make sure 8000 is divisible by this number
 const int BATCH_SIZE = 64;
+
+//learning rate; step size of descending the gradient
+const int LEARNING_RATE = 0.2;
+//-------------------------------------------------------
 
 //an 8000 x {1, 784} data structure to hold our input data
 vector<int> Y_train;
@@ -17,6 +22,11 @@ vector<vector<double>> W_3(128, vector<double>(10, 0));
 vector<double> B_1(256, 0);
 vector<double> B_2(128, 0);
 vector<double> B_3(10, 0);
+
+//hidden and output layers
+vector<vector<double>> layer1(BATCH_SIZE, vector<double>(256, 0));
+vector<vector<double>> layer2(BATCH_SIZE, vector<double>(128, 0));
+vector<vector<double>> layer3(BATCH_SIZE, vector<double>(10, 0));
 
 void init() {
     //reading in all pixel data from training jpg files
@@ -94,11 +104,7 @@ void init() {
 };
 
 //forwards propagation function; takes a batch as input and returns the errors
-vector<double> forward_propagate(vector<vector<double>> & batch, vector<int> labels) {
-    vector<vector<double>> layer1(BATCH_SIZE, vector<double>(256, 0));
-    vector<vector<double>> layer2(BATCH_SIZE, vector<double>(128, 0));
-    vector<vector<double>> layer3(BATCH_SIZE, vector<double>(10, 0));
-
+void forward_propagate(vector<vector<double>> & batch) {
     //layer 1
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < 256; j++) {
@@ -153,39 +159,138 @@ vector<double> forward_propagate(vector<vector<double>> & batch, vector<int> lab
             layer3[i][j] /= sum;
         }
     }
-    
-    //calculating error
+}
+
+//backwards propagation function; nudges weights and biases to minimize error using gradient descent
+void back_propagate(vector<int> & labels) {
+    //calculating current accuracy for display
+    double score = 0;
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        int predicted = -1;
+        int highest = INT_MIN;
+        for (int j = 0; j < 10; j++) {
+            if (layer3[i][j] > highest) {
+                predicted = j;
+                highest = layer3[i][j];
+            }
+        }
+        if (labels[i] == predicted) {
+            score += 1.0;
+        }
+    }
+    cout << "Current Accuracy: " << score / BATCH_SIZE << "\n";
+
+    //calculating errors using the cross entropy loss function
     vector<double> errors(BATCH_SIZE);
     vector<vector<double>> one_hot_encodings(BATCH_SIZE, vector<double>(10, 0));
 
     for (int i = 0; i < BATCH_SIZE; i++) {
         one_hot_encodings[i][labels[i]] = 1;
-        double err_sum = 0;
-        for (int j = 0; j < 10; j++) {
-            err_sum += (layer3[i][j] - one_hot_encodings[i][j]) * (layer3[i][j] - one_hot_encodings[i][j]);
-        }
-        errors[i] = err_sum;
+        errors[i] = -1.0 * log(layer3[i][labels[i]]);
     }
 
-    for (auto i : errors) 
-        cout << i << " ";
+    //Use gradient descent to adjust parameters, starting from the back layers 
+    //adjusting W_3 and B_3
+    {
+        vector<vector<double>> W_3_gradient(128, vector<double>(10, 0));
+        vector<double> B_3_gradient(10, 0);
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            for (int j = 0; j < 10; j++) {
+                B_3_gradient[j] += layer3[i][j] - ((j == labels[i]) ? 1 : 0);
+                for (int k = 0; k < 128; k++) {
+                    W_3_gradient[k][j] += layer2[i][k] * (layer3[i][j] - ((j == labels[i]) ? 1 : 0));
+                }
+            }
+        }
 
-    return errors;
+        //Average out and apply the gradients * learning rate
+        for (int i = 0; i < 10; i++) {
+            B_3[i] -= LEARNING_RATE * B_3_gradient[i] / BATCH_SIZE;
+            for (int j = 0; j < 128; j++) {
+                W_3[j][i] -= LEARNING_RATE * W_3_gradient[j][i] / BATCH_SIZE;
+            }
+        }
+    }
+
+    //adjusting W_2 and B_2
+    vector<vector<double>> A_2_gradient(BATCH_SIZE, vector<double>(128, 0));
+    {
+        vector<vector<double>> W_2_gradient(256, vector<double>(128, 0));
+        vector<double> B_2_gradient(128, 0);
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            for (int j = 0; j < 128; j++) {
+                int sum = 0;
+                for (int k = 0; k < 256; k++) {
+                    for (int l = 0; l < 10; l++) {
+                        sum += W_3[j][l] * (layer3[i][l] - ((l == labels[i]) ? 1 : 0));
+                    }
+                    if (layer2[i][j] != 0) {
+                        W_2_gradient[k][j] += layer1[i][k] * sum;
+                    }
+                }
+                if (layer2[i][j] != 0) {
+                    B_2_gradient[j] += sum;
+                }
+                A_2_gradient[i][j] = sum;
+            }
+        }
+
+        //Average out and apply the gradients * learning rate
+        for (int i = 0; i < 128; i++) {
+            B_2[i] -= LEARNING_RATE * B_2_gradient[i] / BATCH_SIZE;
+            for (int j = 0; j < 256; j++) {
+                W_2[j][i] -= LEARNING_RATE * W_2_gradient[j][i] / BATCH_SIZE;
+            }
+        }
+    }
+
+    //adjusting W_1 and B_1
+    {
+        vector<vector<double>> W_1_gradient(784, vector<double>(256, 0));
+        vector<double> B_1_gradient(256, 0);
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            for (int j = 0; j < 256; j++) {
+                int sum = 0;
+                for (int k = 0; k < 784; k++) {
+                    for (int l = 0; l < 128; l++) {
+                        if (layer2[i][l] != 0) {
+                            sum += W_2[j][l] * A_2_gradient[i][l];
+                        }
+                    }
+                    if (layer1[i][j] != 0) {
+                        W_1_gradient[k][j] += layer1[i][k] * sum;
+                    }
+                }
+                if (layer2[i][j] != 0) {
+                    B_1_gradient[j] += sum;
+                }
+            }
+        }
+
+        //Average out and apply the gradients * learning rate
+        for (int i = 0; i < 256; i++) {
+            B_1[i] -= LEARNING_RATE * B_1_gradient[i] / BATCH_SIZE;
+            for (int j = 0; j < 784; j++) {
+                W_1[j][i] -= LEARNING_RATE * W_1_gradient[j][i] / BATCH_SIZE;
+            }
+        }
+    }
 }
 
-//backwards propagation function; nudges weights and biases to minimize error using gradient descent
-void back_propagate() {
+void print_trained_parameters() {
 
 }
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
     //TODO replace the 1 with batches later
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 80; i++) {
         vector<vector<double>> batch(X_train.begin() + i * BATCH_SIZE, X_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
         vector<int> labels(Y_train.begin() + i * BATCH_SIZE, Y_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
-        vector<double> errors = forward_propagate(batch, labels);
+        forward_propagate(batch);
+        back_propagate(labels);
     }
+    print_trained_parameters();
 }
 
 int main() {
