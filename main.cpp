@@ -276,7 +276,7 @@ void back_propagate(vector<int> & labels) {
         }
     }
 }
-
+//
 void print_trained_parameters() {
 
 }
