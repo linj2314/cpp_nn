@@ -15,6 +15,12 @@ double LEARNING_RATE = 0.01;
 vector<int> Y_train;
 vector<vector<double>> X_train;
 
+vector<int> Y_val;
+vector<vector<double>> X_val;
+
+vector<int> Y_test;
+vector<vector<double>> X_test;
+
 //weights and biases vectors
 vector<vector<double>> W_1(784, vector<double>(256, 0));
 vector<vector<double>> W_2(256, vector<double>(128, 0));
