@@ -5,10 +5,10 @@ using namespace cv;
 
 //HYPER PARAMETERS---------------------------------------
 //batch size; make sure 8000 is divisible by this number
-const int BATCH_SIZE = 64;
+const double BATCH_SIZE = 20;
 
 //learning rate; step size of descending the gradient
-const int LEARNING_RATE = 0.2;
+double LEARNING_RATE = 0.01;
 //-------------------------------------------------------
 
 //an 8000 x {1, 784} data structure to hold our input data
@@ -109,7 +109,7 @@ void forward_propagate(vector<vector<double>> & batch) {
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < 256; j++) {
             double dot_product = 0;
-            for (int k = 0; k < 728; k++) {
+            for (int k = 0; k < 784; k++) {
                 dot_product += batch[i][k] * W_1[k][j];
             }
             dot_product += B_1[j];
@@ -163,6 +163,18 @@ void forward_propagate(vector<vector<double>> & batch) {
 
 //backwards propagation function; nudges weights and biases to minimize error using gradient descent
 void back_propagate(const vector<vector<double>>& batch, const vector<int>& labels) {
+    vector<double> errors(BATCH_SIZE);
+
+    for (int i = 0; i < BATCH_SIZE; i++) {
+        errors[i] = -1.0 * log(layer3[i][labels[i]]);
+    }
+
+    double error_avg = 0;
+    for (auto i : errors) {
+        error_avg += i;
+    }
+    cout << "Average error: " << error_avg / BATCH_SIZE << "\n";
+
     vector<vector<double>> W_3_gradient(128, vector<double>(10, 0));
     vector<double> B_3_gradient(10, 0);
     vector<vector<double>> W_2_gradient(256, vector<double>(128, 0));
@@ -255,12 +267,20 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
-    //TODO replace the 1 with batches later
-    for (int i = 0; i < 80; i++) {
-        vector<vector<double>> batch(X_train.begin() + i * BATCH_SIZE, X_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
-        vector<int> labels(Y_train.begin() + i * BATCH_SIZE, Y_train.begin() + i * BATCH_SIZE + BATCH_SIZE);
-        forward_propagate(batch);
-        back_propagate(batch, labels);
+    int epochs = 20;
+    for (int epoch = 0; epoch < epochs; epoch++) {
+        double total_train_error = 0;
+
+        for (int j = 0; j < batches; j++) {  // Reserve last 1000 samples for validation
+            vector<vector<double>> batch(X_train.begin() + j * BATCH_SIZE, X_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
+            vector<int> labels(Y_train.begin() + j * BATCH_SIZE, Y_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
+            forward_propagate(batch);
+            back_propagate(batch, labels);
+
+            for (int k = 0; k < BATCH_SIZE; k++) {
+                total_train_error -= log(layer3[k][labels[k]]);
+            }
+        }
     }
 }
 
