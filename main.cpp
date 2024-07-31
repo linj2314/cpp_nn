@@ -265,6 +265,81 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
     }
 }
 
+void validate() {
+    vector<vector<double>> layer1_val(1000, vector<double>(256, 0));
+    vector<vector<double>> layer2_val(1000, vector<double>(128, 0));
+    vector<vector<double>> layer3_val(1000, vector<double>(10, 0));
+    for (int i = 0; i < 1000; i++) {
+        for (int j = 0; j < 256; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 784; k++) {
+                dot_product += X_val[i][k] * W_1[k][j];
+            }
+            dot_product += B_1[j];
+
+            //apply ReLU to the final dot product for activation
+            dot_product = max(dot_product, 0.0);
+            layer1_val[i][j] = dot_product;
+        }
+    }
+    
+    //layer 2
+    for (int i = 0; i < 1000; i++) {
+        for (int j = 0; j < 128; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 256; k++) {
+                dot_product += layer1_val[i][k] * W_2[k][j];
+            }
+            dot_product += B_2[j];
+
+            //apply ReLU to the final dot product for activation
+            dot_product = max(dot_product, 0.0);
+            layer2_val[i][j] = dot_product;
+        }
+    }
+
+    //layer 3
+    for (int i = 0; i < 1000; i++) {
+        //sum tracking for softmax activation at end;
+        double max_val = -DBL_MAX;
+        for (int j = 0; j < 10; j++) {
+            double dot_product = 0;
+            for (int k = 0; k < 128; k++) {
+                dot_product += layer2_val[i][k] * W_3[k][j];
+            }
+            dot_product += B_3[j];
+
+            max_val = max(max_val, dot_product);
+            layer3_val[i][j] = dot_product;
+        }
+        //apply softmax in order to get final predictions
+        double sum = 0;
+        for (int j = 0; j < 10; j++) {
+            layer3_val[i][j] = exp(layer3_val[i][j] - max_val);
+            sum += layer3_val[i][j];
+        }
+        for (int j = 0; j < 10; j++) {
+            layer3_val[i][j] /= sum;
+        }
+    }   
+
+    double score = 0;
+    for (int i = 0; i < 1000; i++) {
+        int predicted = -1;
+        double highest = INT_MIN;
+        for (int j = 0; j < 10; j++) {
+            if (layer3_val[i][j] > highest) {
+                predicted = j;
+                highest = layer3_val[i][j];
+            }
+        }
+        if (Y_val[i] == predicted) {
+            score += 1.0;
+        }
+    }
+    cout << "Current Accuracy: " << score / 1000 << "\n";
+}
+
 void train() {
     int batches = 8000 / BATCH_SIZE;
     int epochs = 20;
