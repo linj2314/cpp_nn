@@ -70,26 +70,68 @@ void init() {
         }
     }
 
-    //shuffle training data so we can separate into batches
+    Y_val.reserve(2000);
+    X_val.reserve(2000);
+    for (int i = 0; i < 10; i++) {
+        string cmd = "cd test && cd " + simpson_characters[i] + " && ls > ../../temp.txt";
+        system(cmd.c_str());
+
+        ifstream in = ifstream("temp.txt");
+        string file_name;
+        while (in >> file_name) {
+            vector<double> v(784, 0);
+            Mat image = imread("test/" + simpson_characters[i] + "/" + file_name, cv::IMREAD_GRAYSCALE);
+            
+            for (int j = 0; j < image.rows; j++) {
+                for (int k = 0; k < image.cols; k++) {
+                    v[j * 28 + k] = static_cast<int>(image.at<uchar>(j, k)) / 255.0;
+                }
+            }
+
+            Y_val.push_back(i);
+            X_val.push_back(v);
+        }
+    }
+
+    //shuffle all data
     unsigned seed = chrono::system_clock::now().time_since_epoch().count();
     mt19937 rng(seed);
 
-    vector<int> indexes(8000);
+    vector<int> indexes(2000);
     iota(indexes.begin(), indexes.end(), 0);
     shuffle(indexes.begin(), indexes.end(), rng);
 
-    vector<int> Y_train_temp = Y_train;
-    vector<vector<double> *> X_train_temp(8000);
+    vector<int> Y_val_temp = Y_val;
+    vector<vector<double>> X_val_temp(2000);
+
+    for (int i = 0; i < 2000; i++) {
+        Y_val_temp[i] = Y_val[indexes[i]];
+        X_val_temp[i] = X_val[indexes[i]];
+    }
+
+    Y_val = move(Y_val_temp);
+    X_val = move(X_val_temp);
+
+    X_test = vector<vector<double>>(X_val.begin() + 1000, X_val.end());
+    Y_test = vector<int>(Y_val.begin() + 1000, Y_val.end());
+
+    Y_val.resize(1000);
+    X_val.resize(1000);
+
+    vector<int> indexes2(8000);
+    iota(indexes2.begin(), indexes2.end(), 0);
+    shuffle(indexes2.begin(), indexes2.end(), rng);
+
+    vector<int> Y_train_temp(8000);
+    vector<vector<double>> X_train_temp(8000, vector<double>(X_train[0].size()));
 
     for (int i = 0; i < 8000; i++) {
-        Y_train_temp[indexes[i]] = Y_train[i];
-        X_train_temp[indexes[i]] = &X_train[i];
+        Y_train_temp[i] = Y_train[indexes2[i]];
+        X_train_temp[i] = X_train[indexes2[i]];
     }
 
     Y_train = move(Y_train_temp);
-    for (int i = 0; i < 8000; i++) {
-        X_train[i] = *X_train_temp[i];
-    }
+    X_train = move(X_train_temp);
 
     //initializing weights
     //"He Weight Initialization" named after Kaiming He
