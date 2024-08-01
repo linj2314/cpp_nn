@@ -5,10 +5,10 @@ using namespace cv;
 
 //HYPER PARAMETERS---------------------------------------
 //batch size; make sure 8000 is divisible by this number
-const double BATCH_SIZE = 20;
+const double BATCH_SIZE = 64;
 
 //learning rate; step size of descending the gradient
-double LEARNING_RATE = 0.01;
+double LEARNING_RATE = 0.2;
 //-------------------------------------------------------
 
 //an 8000 x {1, 784} data structure to hold our input data
@@ -33,6 +33,10 @@ vector<double> B_3(10, 0);
 vector<vector<double>> layer1(BATCH_SIZE, vector<double>(256, 0));
 vector<vector<double>> layer2(BATCH_SIZE, vector<double>(128, 0));
 vector<vector<double>> layer3(BATCH_SIZE, vector<double>(10, 0));
+
+vector<vector<double>> layer1_val(1000, vector<double>(256, 0));
+vector<vector<double>> layer2_val(1000, vector<double>(128, 0));
+vector<vector<double>> layer3_val(1000, vector<double>(10, 0));
 
 void init() {
     //reading in all pixel data from training jpg files
@@ -314,9 +318,6 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
 }
 
 void validate() {
-    vector<vector<double>> layer1_val(1000, vector<double>(256, 0));
-    vector<vector<double>> layer2_val(1000, vector<double>(128, 0));
-    vector<vector<double>> layer3_val(1000, vector<double>(10, 0));
     for (int i = 0; i < 1000; i++) {
         for (int j = 0; j < 256; j++) {
             double dot_product = 0;
@@ -390,11 +391,11 @@ void validate() {
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
-    int epochs = 20;
+    int epochs = 30;
     for (int epoch = 0; epoch < epochs; epoch++) {
         double total_train_error = 0;
 
-        for (int j = 0; j < batches; j++) {  // Reserve last 1000 samples for validation
+        for (int j = 0; j < batches; j++) {
             vector<vector<double>> batch(X_train.begin() + j * BATCH_SIZE, X_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
             vector<int> labels(Y_train.begin() + j * BATCH_SIZE, Y_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
             forward_propagate(batch);
@@ -403,7 +404,21 @@ void train() {
             for (int k = 0; k < BATCH_SIZE; k++) {
                 total_train_error -= log(layer3[k][labels[k]]);
             }
-        }
+
+            double val_error = 0;
+            int correct = 0;
+            validate();
+            for (int i = 0; i < 1000; i++) {
+                val_error -= log(layer3_val[i][Y_val[i]]);
+                int predicted = max_element(layer3_val[i].begin(), layer3_val[i].end()) - layer3_val[i].begin();
+                if (predicted == Y_val[i]) correct++;
+            }
+
+            cout << "Epoch " << epoch + 1 
+                << ", Train Error: " << total_train_error / (8000)
+                << ", Validation Error: " << val_error / 1000
+                << ", Validation Accuracy: " << static_cast<double>(correct) / 10 << "%" << endl;
+            }
     }
 }
 
