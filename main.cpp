@@ -8,7 +8,7 @@ using namespace cv;
 const double BATCH_SIZE = 64;
 
 //learning rate; step size of descending the gradient
-double LEARNING_RATE = 0.2;
+double LEARNING_RATE = 0.01;
 //-------------------------------------------------------
 
 //an 8000 x {1, 784} data structure to hold our input data
@@ -215,18 +215,6 @@ void forward_propagate(vector<vector<double>> & batch) {
 
 //backwards propagation function; nudges weights and biases to minimize error using gradient descent
 void back_propagate(const vector<vector<double>>& batch, const vector<int>& labels) {
-    vector<double> errors(BATCH_SIZE);
-
-    for (int i = 0; i < BATCH_SIZE; i++) {
-        errors[i] = -1.0 * log(layer3[i][labels[i]]);
-    }
-
-    double error_avg = 0;
-    for (auto i : errors) {
-        error_avg += i;
-    }
-    cout << "Average error: " << error_avg / BATCH_SIZE << "\n";
-
     vector<vector<double>> W_3_gradient(128, vector<double>(10, 0));
     vector<double> B_3_gradient(10, 0);
     vector<vector<double>> W_2_gradient(256, vector<double>(128, 0));
@@ -371,28 +359,17 @@ void validate() {
             layer3_val[i][j] /= sum;
         }
     }   
-
-    double score = 0;
-    for (int i = 0; i < 1000; i++) {
-        int predicted = -1;
-        double highest = INT_MIN;
-        for (int j = 0; j < 10; j++) {
-            if (layer3_val[i][j] > highest) {
-                predicted = j;
-                highest = layer3_val[i][j];
-            }
-        }
-        if (Y_val[i] == predicted) {
-            score += 1.0;
-        }
-    }
-    cout << "Current Accuracy: " << score / 1000 << "\n";
 }
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
-    int epochs = 30;
+    int epochs = 50;
     for (int epoch = 0; epoch < epochs; epoch++) {
+        /*
+        if (epoch != 0 && epoch % 5 == 0) {
+            LEARNING_RATE *= 0.5;
+        }
+        */
         double total_train_error = 0;
 
         for (int j = 0; j < batches; j++) {
@@ -401,23 +378,25 @@ void train() {
             forward_propagate(batch);
             back_propagate(batch, labels);
 
-            for (int k = 0; k < BATCH_SIZE; k++) {
-                total_train_error -= log(layer3[k][labels[k]]);
-            }
+            if (j == 124) {
+                for (int k = 0; k < BATCH_SIZE; k++) {
+                    total_train_error -= log(layer3[k][labels[k]]);
+                }
 
-            double val_error = 0;
-            int correct = 0;
-            validate();
-            for (int i = 0; i < 1000; i++) {
-                val_error -= log(layer3_val[i][Y_val[i]]);
-                int predicted = max_element(layer3_val[i].begin(), layer3_val[i].end()) - layer3_val[i].begin();
-                if (predicted == Y_val[i]) correct++;
-            }
+                double val_error = 0;
+                int correct = 0;
+                validate();
+                for (int i = 0; i < 1000; i++) {
+                    val_error -= log(layer3_val[i][Y_val[i]]);
+                    int predicted = max_element(layer3_val[i].begin(), layer3_val[i].end()) - layer3_val[i].begin();
+                    if (predicted == Y_val[i]) correct++;
+                }
 
-            cout << "Epoch " << epoch + 1 
-                << ", Train Error: " << total_train_error / (8000)
-                << ", Validation Error: " << val_error / 1000
-                << ", Validation Accuracy: " << static_cast<double>(correct) / 10 << "%" << endl;
+                cout << "Epoch " << epoch + 1 
+                    << ", Train Error: " << total_train_error / ((epoch + 1) * BATCH_SIZE)
+                    << ", Validation Error: " << val_error / 1000
+                    << ", Validation Accuracy: " << static_cast<double>(correct) / 10 << "%" << endl;
+                }
             }
     }
 }
