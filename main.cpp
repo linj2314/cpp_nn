@@ -9,6 +9,9 @@ const double BATCH_SIZE = 64;
 
 //learning rate; step size of descending the gradient
 double LEARNING_RATE = 0.2;
+
+const int LAYER1_SIZE = 16;
+const int LAYER2_SIZE = 10;
 //-------------------------------------------------------
 
 //an 8000 x {1, 784} data structure to hold our input data
@@ -22,21 +25,17 @@ vector<int> Y_test;
 vector<vector<double>> X_test;
 
 //weights and biases vectors
-vector<vector<double>> W_1(784, vector<double>(256, 0));
-vector<vector<double>> W_2(256, vector<double>(128, 0));
-vector<vector<double>> W_3(128, vector<double>(10, 0));
-vector<double> B_1(256, 0);
-vector<double> B_2(128, 0);
-vector<double> B_3(10, 0);
+vector<vector<double>> W_1(784, vector<double>(LAYER1_SIZE, 0));
+vector<vector<double>> W_2(LAYER1_SIZE, vector<double>(LAYER2_SIZE, 0));
+vector<double> B_1(LAYER1_SIZE, 0);
+vector<double> B_2(LAYER2_SIZE, 0);
 
 //hidden and output layers
-vector<vector<double>> layer1(BATCH_SIZE, vector<double>(256, 0));
-vector<vector<double>> layer2(BATCH_SIZE, vector<double>(128, 0));
-vector<vector<double>> layer3(BATCH_SIZE, vector<double>(10, 0));
+vector<vector<double>> layer1(BATCH_SIZE, vector<double>(LAYER1_SIZE, 0));
+vector<vector<double>> layer2(BATCH_SIZE, vector<double>(LAYER2_SIZE, 0));
 
-vector<vector<double>> layer1_val(1000, vector<double>(256, 0));
-vector<vector<double>> layer2_val(1000, vector<double>(128, 0));
-vector<vector<double>> layer3_val(1000, vector<double>(10, 0));
+vector<vector<double>> layer1_val(1000, vector<double>(LAYER1_SIZE, 0));
+vector<vector<double>> layer2_val(1000, vector<double>(LAYER2_SIZE, 0));
 
 void init() {
     //reading in all pixel data from training jpg files
@@ -151,15 +150,13 @@ void init() {
         generate(i.begin(), i.end(), rand_gen);
     for (auto & i : W_2)
         generate(i.begin(), i.end(), rand_gen);
-    for (auto & i : W_3)
-        generate(i.begin(), i.end(), rand_gen);
 };
 
 //forwards propagation function; takes a batch as input and returns the errors
 void forward_propagate(vector<vector<double>> & batch) {
     //layer 1
     for (int i = 0; i < BATCH_SIZE; i++) {
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < LAYER1_SIZE; j++) {
             double dot_product = 0;
             for (int k = 0; k < 784; k++) {
                 dot_product += batch[i][k] * W_1[k][j];
@@ -171,44 +168,29 @@ void forward_propagate(vector<vector<double>> & batch) {
             layer1[i][j] = dot_product;
         }
     }
-    
+
     //layer 2
     for (int i = 0; i < BATCH_SIZE; i++) {
-        for (int j = 0; j < 128; j++) {
+        //sum tracking for softmax activation at end;
+        double max_val = -DBL_MAX;
+        for (int j = 0; j < LAYER2_SIZE; j++) {
             double dot_product = 0;
-            for (int k = 0; k < 256; k++) {
+            for (int k = 0; k < LAYER1_SIZE; k++) {
                 dot_product += layer1[i][k] * W_2[k][j];
             }
             dot_product += B_2[j];
 
-            //apply ReLU to the final dot product for activation
-            dot_product = max(dot_product, 0.0);
-            layer2[i][j] = dot_product;
-        }
-    }
-
-    //layer 3
-    for (int i = 0; i < BATCH_SIZE; i++) {
-        //sum tracking for softmax activation at end;
-        double max_val = -DBL_MAX;
-        for (int j = 0; j < 10; j++) {
-            double dot_product = 0;
-            for (int k = 0; k < 128; k++) {
-                dot_product += layer2[i][k] * W_3[k][j];
-            }
-            dot_product += B_3[j];
-
             max_val = max(max_val, dot_product);
-            layer3[i][j] = dot_product;
+            layer2[i][j] = dot_product;
         }
         //apply softmax in order to get final predictions
         double sum = 0;
-        for (int j = 0; j < 10; j++) {
-            layer3[i][j] = exp(layer3[i][j] - max_val);
-            sum += layer3[i][j];
+        for (int j = 0; j < LAYER2_SIZE; j++) {
+            layer2[i][j] = exp(layer2[i][j] - max_val);
+            sum += layer2[i][j];
         }
-        for (int j = 0; j < 10; j++) {
-            layer3[i][j] /= sum;
+        for (int j = 0; j < LAYER2_SIZE; j++) {
+            layer2[i][j] /= sum;
         }
     }
 }
@@ -218,7 +200,7 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
     vector<double> errors(BATCH_SIZE);
 
     for (int i = 0; i < BATCH_SIZE; i++) {
-        errors[i] = -1.0 * log(layer3[i][labels[i]]);
+        errors[i] = -1.0 * log(layer2[i][labels[i]]);
     }
 
     double error_avg = 0;
@@ -227,40 +209,26 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
     }
     cout << "Average error: " << error_avg / BATCH_SIZE << "\n";
 
-    vector<vector<double>> W_3_gradient(128, vector<double>(10, 0));
-    vector<double> B_3_gradient(10, 0);
-    vector<vector<double>> W_2_gradient(256, vector<double>(128, 0));
-    vector<double> B_2_gradient(128, 0);
-    vector<vector<double>> W_1_gradient(784, vector<double>(256, 0));
-    vector<double> B_1_gradient(256, 0);
+    vector<vector<double>> W_2_gradient(LAYER1_SIZE, vector<double>(LAYER2_SIZE, 0));
+    vector<double> B_2_gradient(LAYER2_SIZE, 0);
+    vector<vector<double>> W_1_gradient(784, vector<double>(LAYER1_SIZE, 0));
+    vector<double> B_1_gradient(LAYER1_SIZE, 0);
 
-    vector<vector<double>> delta3(BATCH_SIZE, vector<double>(10, 0));
-    vector<vector<double>> delta2(BATCH_SIZE, vector<double>(128, 0));
-    vector<vector<double>> delta1(BATCH_SIZE, vector<double>(256, 0));
+    vector<vector<double>> delta2(BATCH_SIZE, vector<double>(LAYER2_SIZE, 0));
+    vector<vector<double>> delta1(BATCH_SIZE, vector<double>(LAYER1_SIZE, 0));
 
-    // Calculate output layer error (delta3)
+    // Calculate output layer error (delta2)
     for (int i = 0; i < BATCH_SIZE; i++) {
-        for (int j = 0; j < 10; j++) {
-            delta3[i][j] = layer3[i][j] - (j == labels[i] ? 1.0 : 0.0);
-        }
-    }
-
-    // Backpropagate to layer 2
-    for (int i = 0; i < BATCH_SIZE; i++) {
-        for (int j = 0; j < 128; j++) {
-            double error = 0;
-            for (int k = 0; k < 10; k++) {
-                error += W_3[j][k] * delta3[i][k];
-            }
-            delta2[i][j] = error * (layer2[i][j] > 0 ? 1 : 0);  // ReLU derivative
+        for (int j = 0; j < LAYER2_SIZE; j++) {
+            delta2[i][j] = layer2[i][j] - (j == labels[i] ? 1.0 : 0.0);
         }
     }
 
     // Backpropagate to layer 1
     for (int i = 0; i < BATCH_SIZE; i++) {
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < LAYER1_SIZE; j++) {
             double error = 0;
-            for (int k = 0; k < 128; k++) {
+            for (int k = 0; k < LAYER2_SIZE; k++) {
                 error += W_2[j][k] * delta2[i][k];
             }
             delta1[i][j] = error * (layer1[i][j] > 0 ? 1 : 0);  // ReLU derivative
@@ -269,24 +237,16 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
 
     // Calculate gradients
     for (int i = 0; i < BATCH_SIZE; i++) {
-        // Layer 3 gradients
-        for (int j = 0; j < 10; j++) {
-            B_3_gradient[j] += delta3[i][j];
-            for (int k = 0; k < 128; k++) {
-                W_3_gradient[k][j] += layer2[i][k] * delta3[i][j];
-            }
-        }
-
         // Layer 2 gradients
-        for (int j = 0; j < 128; j++) {
+        for (int j = 0; j < LAYER2_SIZE; j++) {
             B_2_gradient[j] += delta2[i][j];
-            for (int k = 0; k < 256; k++) {
+            for (int k = 0; k < LAYER1_SIZE; k++) {
                 W_2_gradient[k][j] += layer1[i][k] * delta2[i][j];
             }
         }
 
         // Layer 1 gradients
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < LAYER1_SIZE; j++) {
             B_1_gradient[j] += delta1[i][j];
             for (int k = 0; k < 784; k++) {
                 W_1_gradient[k][j] += batch[i][k] * delta1[i][j];
@@ -295,21 +255,14 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
     }
 
     // Update weights and biases
-    for (int i = 0; i < 10; i++) {
-        B_3[i] -= LEARNING_RATE * B_3_gradient[i] / BATCH_SIZE;
-        for (int j = 0; j < 128; j++) {
-            W_3[j][i] -= LEARNING_RATE * W_3_gradient[j][i] / BATCH_SIZE;
-        }
-    }
-
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < LAYER2_SIZE; i++) {
         B_2[i] -= LEARNING_RATE * B_2_gradient[i] / BATCH_SIZE;
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < LAYER1_SIZE; j++) {
             W_2[j][i] -= LEARNING_RATE * W_2_gradient[j][i] / BATCH_SIZE;
         }
     }
 
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < LAYER1_SIZE; i++) {
         B_1[i] -= LEARNING_RATE * B_1_gradient[i] / BATCH_SIZE;
         for (int j = 0; j < 784; j++) {
             W_1[j][i] -= LEARNING_RATE * W_1_gradient[j][i] / BATCH_SIZE;
@@ -318,8 +271,9 @@ void back_propagate(const vector<vector<double>>& batch, const vector<int>& labe
 }
 
 void validate() {
+    //layer 1
     for (int i = 0; i < 1000; i++) {
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < LAYER1_SIZE; j++) {
             double dot_product = 0;
             for (int k = 0; k < 784; k++) {
                 dot_product += X_val[i][k] * W_1[k][j];
@@ -331,62 +285,31 @@ void validate() {
             layer1_val[i][j] = dot_product;
         }
     }
-    
+
     //layer 2
     for (int i = 0; i < 1000; i++) {
-        for (int j = 0; j < 128; j++) {
+        //sum tracking for softmax activation at end;
+        double max_val = -DBL_MAX;
+        for (int j = 0; j < LAYER2_SIZE; j++) {
             double dot_product = 0;
-            for (int k = 0; k < 256; k++) {
+            for (int k = 0; k < LAYER1_SIZE; k++) {
                 dot_product += layer1_val[i][k] * W_2[k][j];
             }
             dot_product += B_2[j];
 
-            //apply ReLU to the final dot product for activation
-            dot_product = max(dot_product, 0.0);
-            layer2_val[i][j] = dot_product;
-        }
-    }
-
-    //layer 3
-    for (int i = 0; i < 1000; i++) {
-        //sum tracking for softmax activation at end;
-        double max_val = -DBL_MAX;
-        for (int j = 0; j < 10; j++) {
-            double dot_product = 0;
-            for (int k = 0; k < 128; k++) {
-                dot_product += layer2_val[i][k] * W_3[k][j];
-            }
-            dot_product += B_3[j];
-
             max_val = max(max_val, dot_product);
-            layer3_val[i][j] = dot_product;
+            layer2_val[i][j] = dot_product;
         }
         //apply softmax in order to get final predictions
         double sum = 0;
-        for (int j = 0; j < 10; j++) {
-            layer3_val[i][j] = exp(layer3_val[i][j] - max_val);
-            sum += layer3_val[i][j];
+        for (int j = 0; j < LAYER2_SIZE; j++) {
+            layer2_val[i][j] = exp(layer2_val[i][j] - max_val);
+            sum += layer2_val[i][j];
         }
-        for (int j = 0; j < 10; j++) {
-            layer3_val[i][j] /= sum;
+        for (int j = 0; j < LAYER2_SIZE; j++) {
+            layer2_val[i][j] /= sum;
         }
     }   
-
-    double score = 0;
-    for (int i = 0; i < 1000; i++) {
-        int predicted = -1;
-        double highest = INT_MIN;
-        for (int j = 0; j < 10; j++) {
-            if (layer3_val[i][j] > highest) {
-                predicted = j;
-                highest = layer3_val[i][j];
-            }
-        }
-        if (Y_val[i] == predicted) {
-            score += 1.0;
-        }
-    }
-    cout << "Current Accuracy: " << score / 1000 << "\n";
 }
 
 void train() {
@@ -402,15 +325,15 @@ void train() {
             back_propagate(batch, labels);
 
             for (int k = 0; k < BATCH_SIZE; k++) {
-                total_train_error -= log(layer3[k][labels[k]]);
+                total_train_error -= log(layer2[k][labels[k]]);
             }
 
             double val_error = 0;
             int correct = 0;
             validate();
             for (int i = 0; i < 1000; i++) {
-                val_error -= log(layer3_val[i][Y_val[i]]);
-                int predicted = max_element(layer3_val[i].begin(), layer3_val[i].end()) - layer3_val[i].begin();
+                val_error -= log(layer2_val[i][Y_val[i]]);
+                int predicted = max_element(layer2_val[i].begin(), layer2_val[i].end()) - layer2_val[i].begin();
                 if (predicted == Y_val[i]) correct++;
             }
 
