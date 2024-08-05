@@ -10,7 +10,7 @@ const double BATCH_SIZE = 64;
 //learning rate; step size of descending the gradient
 double LEARNING_RATE = 0.01;
 
-const int LAYER1_SIZE = 16;
+const int LAYER1_SIZE = 64;
 const int LAYER2_SIZE = 10;
 //-------------------------------------------------------
 
@@ -308,13 +308,14 @@ void validate() {
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
-    int epochs = 50;
+    int epochs = 100;
     for (int epoch = 0; epoch < epochs; epoch++) {
         /*
         if (epoch != 0 && epoch % 5 == 0) {
             LEARNING_RATE *= 0.5;
         }
         */
+        
         double total_train_error = 0;
 
         for (int j = 0; j < batches; j++) {
@@ -323,11 +324,11 @@ void train() {
             forward_propagate(batch);
             back_propagate(batch, labels);
 
-            if (j == 124) {
-                for (int k = 0; k < BATCH_SIZE; k++) {
-                    total_train_error -= log(layer2[k][labels[k]]);
-                }
+            for (int k = 0; k < BATCH_SIZE; k++) {
+                total_train_error -= log(layer2[k][labels[k]]);
+            }
 
+            if (j == 124) {
                 double val_error = 0;
                 int correct = 0;
                 validate();
@@ -338,7 +339,7 @@ void train() {
                 }
 
                 cout << "Epoch " << epoch + 1 
-                    << ", Train Error: " << total_train_error / ((epoch + 1) * BATCH_SIZE)
+                    << ", Train Error: " << total_train_error / ((j + 1) * BATCH_SIZE)
                     << ", Validation Error: " << val_error / 1000
                     << ", Validation Accuracy: " << static_cast<double>(correct) / 10 << "%" << endl;
             }
