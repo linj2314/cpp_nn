@@ -402,7 +402,7 @@ void train() {
                 }
 
                 cout << "Epoch " << epoch + 1 
-                    << ", Train Error: " << total_train_error / ((epoch + 1) * BATCH_SIZE)
+                    << ", Train Error: " << total_train_error / ((j + 1) * BATCH_SIZE)
                     << ", Validation Error: " << val_error / 1000
                     << ", Validation Accuracy: " << static_cast<double>(correct) / 10 << "%" << endl;
                 }
