@@ -387,11 +387,11 @@ void train() {
             forward_propagate(batch);
             back_propagate(batch, labels);
 
-            if (j == batches - 1) {
-                for (int k = 0; k < BATCH_SIZE; k++) {
-                    total_train_error -= log(layer3[k][labels[k]]);
-                }
+            for (int k = 0; k < BATCH_SIZE; k++) {
+                total_train_error -= log(layer3[k][labels[k]]);
+            }
 
+            if (j == batches - 1) {
                 double val_error = 0;
                 int correct = 0;
                 validate();

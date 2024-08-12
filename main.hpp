@@ -12,5 +12,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <omp.h>
 
 #endif
