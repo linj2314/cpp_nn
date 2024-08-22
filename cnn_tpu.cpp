@@ -8,7 +8,7 @@ using m2D = vector<m1D>;
 using m3D = vector<m2D>;
 using m4D = vector<m3D>;
 
-const int BATCH_SIZE = 1;
+const int BATCH_SIZE = 80;
 const double LEARNING_RATE = 0.01;
 
 //train, validation and testing datasets
@@ -80,21 +80,6 @@ void print(m4D & m) {
                 }
             }
         }
-    }
-}
-
-void print_d(m4D & m) {
-    for (int i = 0; i < m.size(); i++) {
-        for (int j = 0; j < m[0][0][0].size(); j++) {
-            for (int k = 0; k < m[0].size(); k++) {
-                for (int l = 0; l < m[0][0].size(); l++) {
-                    cout << m[i][k][l][j] << " ";
-                }
-                cout << "\n";
-            }
-            cout << "\n";
-        }
-        cout << "----------------------------------------------------------------\n";
     }
 }
 
@@ -254,7 +239,7 @@ void init() {
 };
 
 void ff_convolution(m4D & input, m4D & output, m4D & kernel, m1D & bias) {
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < kernel.size(); j++) {
             for (int k = 0; k < output[0].size(); k++) {
@@ -275,7 +260,7 @@ void ff_convolution(m4D & input, m4D & output, m4D & kernel, m1D & bias) {
 }
 
 void ff_pooling(m4D & input, m4D & output, vector<vector<vector<vector<int>>>> & indexes, vector<vector<vector<vector<bool>>>> & dropout, int padding) {
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < input[0][0][0].size(); j++) {
             for (int k = 0; k < output[0].size() - padding * 2; k++) {
@@ -304,7 +289,7 @@ void ff_pooling(m4D & input, m4D & output, vector<vector<vector<vector<int>>>> &
 
 void feed_forward(m3D & input) {
     m4D input_4D(BATCH_SIZE, m3D(30, m2D(30, m1D(1))));
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < 28; j++) {
             for (int k = 0; k < 28; k++) {
@@ -329,7 +314,7 @@ void feed_forward(m3D & input) {
     //fully connected layers
     //not worth making functions for
     {
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 1024; j++) {
                 double dot_prod = 0;
@@ -345,7 +330,7 @@ void feed_forward(m3D & input) {
             }
         }
 
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 10; j++) {
                 double dot_prod = 0;
@@ -386,16 +371,16 @@ m4D flip(m4D & m) {
     return ret;
 }
 
-void input_cnn_gradients(m4D & kernel, m4D & output_delta, m4D & input_delta, m4D & input_layer, int input_delta_padding, int layer_padding) {
+void input_cnn_gradients(m4D & kernel, m4D & output_delta, m4D & input_delta, m4D & input_layer, int layer_padding, int delta_padding) {
     m4D K_flipped = flip(kernel);
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < kernel.size(); j++) {
-            for (int k = 0; k < input_delta[0].size() - input_delta_padding * 2; k++) {
-                for (int l = 0; l < input_delta[0][0].size() - input_delta_padding * 2; l++) {
+            for (int k = 0; k < input_delta[0].size() - delta_padding * 2; k++) {
+                for (int l = 0; l < input_delta[0][0].size() - delta_padding * 2; l++) {
                     for (int m = 0; m < kernel[0][0][0].size(); m++) {
                         if (input_layer[i][k + layer_padding][l + layer_padding][m] <= 0) {
-                            input_delta[i][k + input_delta_padding][l + input_delta_padding][m] = 0;
+                            input_delta[i][k + delta_padding][l + delta_padding][m] = 0;
                             continue;
                         }
                         double dot_prod = 0;
@@ -404,35 +389,34 @@ void input_cnn_gradients(m4D & kernel, m4D & output_delta, m4D & input_delta, m4
                                 dot_prod += output_delta[i][k + ki][l + li][j] * K_flipped[j][ki][li][m];
                             }
                         }
-                        input_delta[i][k + input_delta_padding][l + input_delta_padding][m] = dot_prod;
+                        input_delta[i][k + delta_padding][l + delta_padding][m] = dot_prod;
                     }
                 }
             }
         }
     }
-    //print_d(input_delta);
 }
 
-void K_B_cnn_gradients(m4D & delta, m4D & inputs, m4D & K_gradient, m1D & B_gradient, int delta_padding) {
-    //#pragma omp parallel for
+void K_B_cnn_gradients(m4D & delta, m4D & inputs, m4D & K_gradient, m1D & B_gradient, int padding) {
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < K_gradient.size(); j++) {
             for (int k = 0; k < 3; k++) {
                 for (int l = 0; l < 3; l++) {
                     for (int m = 0; m < inputs[0][0][0].size(); m++) {
                         double error = 0;
-                        for (int ki = 0; ki < delta[0].size() - 2 * delta_padding; ki++) {
-                            for (int li = 0; li < delta[0][0].size() - 2 * delta_padding; li++) {
-                                error += inputs[i][k + ki][l + li][m] * delta[i][ki + delta_padding][li + delta_padding][j];
+                        for (int ki = 0; ki < delta[0].size() - 2 * padding; ki++) {
+                            for (int li = 0; li < delta[0][0].size() - 2 * padding; li++) {
+                                error += inputs[i][k + ki][l + li][m] * delta[i][ki + padding][li + padding][j];
                             }
                         }
                         K_gradient[j][k][l][m] += error;
                     }
                 }
             }
-            for (int k = 0; k < delta[0].size() - 2 * delta_padding; k++) {
-                for (int l = 0; l < delta[0][0].size() - 2 * delta_padding; l++) {
-                    B_gradient[j] += delta[i][k + delta_padding][l + delta_padding][j];
+            for (int k = 0; k < delta[0].size() - 2 * padding; k++) {
+                for (int l = 0; l < delta[0][0].size() - 2 * padding; l++) {
+                    B_gradient[j] += delta[i][k + padding][l + padding][j];
                 }
             }
         }
@@ -440,7 +424,7 @@ void K_B_cnn_gradients(m4D & delta, m4D & inputs, m4D & K_gradient, m1D & B_grad
 }
 
 void undo_pooling(vector<vector<vector<vector<int>>>> & PI, m4D & input_delta, m4D & output_delta, vector<vector<vector<vector<bool>>>> & PD) {
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < PI[0].size(); j++) {
             for (int k = 0; k < PI[0][0].size(); k++) {
@@ -495,7 +479,7 @@ void apply_weight_gradient(m2D & w_gradient, m2D & w) {
 
 void back_propagate(vector<int> & labels, m3D & batch) {
     m4D batch_4D(BATCH_SIZE, m3D(30, m2D(30, m1D(1, 0))));
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int i = 0; i < BATCH_SIZE; i++) {
         for (int j = 0; j < 28; j++) {
             for (int k = 0; k < 28; k++) {
@@ -517,14 +501,14 @@ void back_propagate(vector<int> & labels, m3D & batch) {
     //back propagation for fully connected layers
     //relatively short so didn't put into functions
     {
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 10; j++) {
                 delta11[i][j] = L_11[i][j] - (j == labels[i] ? 1 : 0);
             }
         }
 
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 1024; j++) {
                 double error = 0;
@@ -537,7 +521,7 @@ void back_propagate(vector<int> & labels, m3D & batch) {
             }
         }
 
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 256; j++) {
                 double error = 0;
@@ -550,7 +534,7 @@ void back_propagate(vector<int> & labels, m3D & batch) {
             }
         }
 
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int i = 0; i < BATCH_SIZE; i++) {
             for (int j = 0; j < 10; j++) {
                 B_11_gradient[j] += delta11[i][j];
@@ -597,29 +581,25 @@ void back_propagate(vector<int> & labels, m3D & batch) {
     undo_pooling(PI_9, delta9, delta8, PD_9);
 
     K_B_cnn_gradients(delta8, L_7, K_8_gradient, B_8_gradient, 2);
-    input_cnn_gradients(K_8, delta8, delta7, L_7, 1, 0);
-
-    return;
+    input_cnn_gradients(K_8, delta8, delta7, L_7, 0, 1);
     
     K_B_cnn_gradients(delta7, P_6, K_7_gradient, B_7_gradient, 1);
-    input_cnn_gradients(K_7, delta7, delta6, P_6, 0, 1);
+    input_cnn_gradients(K_7, delta7, delta6, P_6, 1, 0);
     
     undo_pooling(PI_6, delta6, delta5, PD_6);
     
     K_B_cnn_gradients(delta5, L_4, K_5_gradient, B_5_gradient, 2);
-    input_cnn_gradients(K_5, delta5, delta4, L_4, 1, 0);
+    input_cnn_gradients(K_5, delta5, delta4, L_4, 0, 1);
     
     K_B_cnn_gradients(delta4, P_3, K_4_gradient, B_4_gradient, 1);
-    input_cnn_gradients(K_4, delta4, delta3, P_3, 0, 1);
+    input_cnn_gradients(K_4, delta4, delta3, P_3, 1, 0);
     
     undo_pooling(PI_3, delta3, delta2, PD_3);
 
     K_B_cnn_gradients(delta2, L_1, K_2_gradient, B_2_gradient, 2);
-    input_cnn_gradients(K_2, delta2, delta1, L_1, 1, 0);
+    input_cnn_gradients(K_2, delta2, delta1, L_1, 0, 1);
     
     K_B_cnn_gradients(delta1, batch_4D, K_1_gradient, B_1_gradient, 1);
-
-    //print_d(delta5);
 
     //apply all gradients
     apply_weight_gradient(W_11_gradient, W_11);
@@ -644,24 +624,15 @@ void back_propagate(vector<int> & labels, m3D & batch) {
 
 void train() {
     int batches = 8000 / BATCH_SIZE;
-    for (int i = 0; i < 1; i++) {
-        for (int j = 0; j < 1; j++) {
+    for (int i = 0; i < 50; i++) {
+        for (int j = 0; j < batches; j++) {
             cout << "Epoch " << i << " batch " << j << "\n";
             m3D batch = m3D(X_train.begin() + j * BATCH_SIZE, X_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
             vector<int> labels = vector<int>(Y_train.begin() + j * BATCH_SIZE, Y_train.begin() + j * BATCH_SIZE + BATCH_SIZE);
             feed_forward(batch);
-            
-            double total_error = 0;
-            //#pragma omp parallel for
-            for (int i = 0; i < BATCH_SIZE; i++) {
-                total_error -= log(L_11[i][labels[i]]);
-            }
-            cout << "Current training error: " << total_error / BATCH_SIZE << "\n";
-
             back_propagate(labels, batch);
         }
 
-        /*
         //validation set here
         double val_accuracy = 0;
         for (int j = 0; j < 1000 / BATCH_SIZE; j++) {
@@ -675,7 +646,6 @@ void train() {
             }
         }
         cout << "Validation accuracy: " << val_accuracy << "%\n";
-        */
     }
 }
 
@@ -695,13 +665,13 @@ void test() {
 }
 
 int main() {
-    //omp_set_num_threads(6);
+    omp_set_num_threads(BATCH_SIZE);
     
     init();
 
     train();
 
-    //test();
+    test();
 
     return 0;
 }
