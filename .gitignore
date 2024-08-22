@@ -7,3 +7,7 @@ Makefile
 test
 train
 test.py
+nn
+cnn
+*.txt
+*.py
